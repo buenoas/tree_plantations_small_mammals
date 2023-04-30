@@ -1,0 +1,154 @@
+### ESTE CODIGO PRODUZ AS CURVAS DE RAREFACAO DE PEQUENOS MAMIFEROS ###
+
+# CARREGA OS PACOTES
+library(iNEXT)
+library(ggplot2)
+library(rphylopic)
+
+
+# PRODUZ OS DADOS A PARTIR DA TABELA DO TCC DA GABRIELA
+species = c("Cryptonanus cf. guahybae",
+            "Didelphis albiventris",
+            "Akodon montensis",
+            "Calomys cf. tener",
+            "Euryoryzomys russatus",
+            "Mus musculus",
+            "Oligoryzomys flavescens",
+            "Oligoryzomys nigripes",
+            "Sooretamys angouya",
+            "Thaptomys nigrita")
+
+natural_forest = c(0, 0, 103, 0, 1, 0, 3, 105, 3, 28)
+araucaria_plantation = c(1, 1, 93, 0, 0, 1, 1, 77, 6, 32)
+pine_plantation = c(0, 0, 16, 1, 0, 0, 1, 44, 0, 35)
+
+df = data.frame(natural_forest,
+                araucaria_plantation,
+                pine_plantation)
+
+rownames(df) = species
+
+
+# PRODUZ AS CURVAS DE RAREFACAO
+x = iNEXT(df,
+          q = 0,
+          datatype = "abundance",
+          size = NULL,
+          endpoint = NULL,
+          knots = max(colSums(df)) * 2,
+          se = TRUE,
+          conf = 0.95,
+          nboot = 1000)
+
+
+# VISUALIZA UM GRAFICO SIMPLES
+ggiNEXT(x)
+
+
+# ORGANIZA OS DADOS PARA PRODUZIR O GRAFICO ELABORADO
+y = x$iNextEst$size_based
+
+assemblage_lowest_effort = names(which(colSums(df) == min(colSums(df))))
+
+z = y[-which(y$Assemblage != assemblage_lowest_effort & y$Method == "Extrapolation"), ]
+
+z$Assemblage = factor(z$Assemblage,
+                      levels = unique(z$Assemblage))
+
+# Define o esforco amostral
+effort = min(c(max(colSums(df)),
+               min(colSums(df)) * 2))
+
+# OBTEM A IMAGEM DE UM MORCEGO
+uuid <- get_uuid(name = "Sigmodon hispidus")
+img <- get_phylopic(uuid = uuid)
+
+
+# PRODUZ O GRAFICO ELABORADO
+p = 
+  
+  ggplot(data = z, aes(x = m, y = qD, colour = Assemblage)) + 
+  
+  # Adiciona a imagem do pequeno mamifero
+  add_phylopic(img = img, color = "grey50",
+               x = 20, y = max(z$qD.UCL) - 1, ysize = 32) +
+  
+  geom_segment(x = effort, y = 0,
+               xend = effort, yend = max(subset(z, m == effort)$qD),
+               colour = "grey50", linetype = "dashed", size = 1/3) +
+  geom_line(linetype = "dashed", size = 1) + 
+  geom_line(data = subset(z, Method != "Extrapolation"),
+            linetype = "solid", size = 1) +
+  geom_point(data = subset(z, m == effort), size = 3) +
+  
+  labs(x = "Number of individuals captured",
+       y = "Number of small mammal species",
+       colour = NULL,
+       title = "Projeto FLORESTAS | Pequenos mamíferos") +
+  
+  scale_x_continuous(limits = c(0.99, max(z$m)),
+                     breaks = c(1, 50, 100, 150, effort, max(z$m))) +
+  scale_y_continuous(limits = c(0.99,
+                                max(subset(z, m == effort)$qD.UCL)),
+                     breaks = 1:10) +
+  scale_colour_manual(values = c("#2DBF81", "#812DBF", "#BF812D"),
+                      labels = c("Natural Forest",
+                                 "Araucaria Plantation",
+                                 "Pine Plantation")) +
+  
+  annotate("text", x = effort + 5, y = 1,
+           label = "Standardized\nsampling effort",
+           size = 3, vjust = 0.3, hjust = 0, colour = "grey50") +
+  
+  theme_classic(base_size = 12) +
+  theme(legend.position = "top",
+        axis.line = element_line(colour = "black", size = 1/3),
+        axis.ticks = element_line(colour = "black", size = 1/3),
+        axis.text = element_text(colour = "black"),
+        axis.title = element_text(colour = "black"),
+        plot.margin = unit(c(5.5, 0, 5.5, 5.5), "pt"))
+
+p
+
+
+g = 
+  
+  ggplot(data = subset(z, m == effort),
+         aes(x = Assemblage, y = qD, colour = Assemblage)) + 
+  
+  geom_point(size = 3) +
+  geom_errorbar(aes(x = Assemblage,
+                    ymin = qD.LCL,
+                    ymax = qD.UCL,
+                    colour = Assemblage),
+                width = 0.3) +
+  
+  labs(x = "",
+       y = "",
+       colour = NULL,
+       title = "") +
+  
+  scale_x_discrete(labels = c(effort, effort, effort)) +
+  scale_y_continuous(limits = c(0.99,
+                                max(subset(z, m == effort)$qD.UCL)),
+                     breaks = seq(1, 6, 1)) +
+  scale_colour_manual(values = c("#2DBF81", "#812DBF", "#BF812D"),
+                      labels = c("", "", "")) +
+  
+  theme_classic(base_size = 12) +
+  theme(legend.position = "top",
+        axis.line.x = element_line(colour = "black", size = 1/3),
+        axis.line.y = element_line(colour = "white"),
+        axis.ticks.x = element_line(colour = "black", size = 1/3),
+        axis.ticks.y = element_line(colour = "white"),
+        axis.text.x = element_text(colour = "black"),
+        axis.text.y = element_text(colour = "white"),
+        axis.title = element_text(colour = "black"),
+        plot.margin = unit(c(5.5, 5.5, 5.5, 0), "pt")) +
+  guides(color = guide_legend(override.aes = list(colour = "white")))
+
+g
+
+ggsave(grid.arrange(p, g, widths = c(4, 1), ncol = 2),
+       filename = "small_mammals.jpg", dpi = 600,
+       w = 16, h = 14, units = "cm")
